@@ -1,0 +1,325 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ultra Endless Runner</title>
+
+<style>
+body{
+  margin:0;
+  overflow:hidden;
+  background:#020617;
+  font-family:Arial;
+  color:white;
+  text-align:center;
+}
+
+canvas{
+  display:block;
+  margin:auto;
+  background:linear-gradient(#38bdf8,#e0f2fe);
+}
+
+#ui{
+  position:absolute;
+  width:100%;
+  top:10px;
+  font-size:20px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="ui">
+Score: <span id="score">0</span> |
+Coins: <span id="coins">0</span> |
+High Score: <span id="high">0</span>
+</div>
+
+<canvas id="game" width="900" height="320"></canvas>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+const scoreEl=document.getElementById("score");
+const coinEl=document.getElementById("coins");
+const highEl=document.getElementById("high");
+
+let highScore=localStorage.getItem("runnerHigh")||0;
+highEl.textContent=highScore;
+
+/* =====================
+ SOUND (NO FILES)
+===================== */
+const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+
+function beep(freq,duration){
+  const osc=audioCtx.createOscillator();
+  const gain=audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.frequency.value=freq;
+  osc.start();
+  gain.gain.exponentialRampToValueAtTime(
+    0.00001,
+    audioCtx.currentTime+duration
+  );
+  osc.stop(audioCtx.currentTime+duration);
+}
+
+/* =====================
+ PLAYER
+===================== */
+const player={
+  x:120,
+  y:230,
+  w:45,
+  h:45,
+  dy:0,
+  gravity:.7,
+  jump:-14,
+  grounded:true,
+  frame:0
+};
+
+let obstacles=[];
+let coins=[];
+let frame=0;
+let speed=6;
+let score=0;
+let coinScore=0;
+let gameOver=false;
+
+/* =====================
+ CONTROLS
+===================== */
+function jump(){
+ if(player.grounded){
+   player.dy=player.jump;
+   player.grounded=false;
+   beep(400,.1);
+ }
+}
+
+document.addEventListener("keydown",e=>{
+ if(e.code==="Space"||e.code==="ArrowUp") jump();
+ if(e.code==="KeyR" && gameOver) restart();
+});
+
+canvas.addEventListener("touchstart",jump);
+
+/* =====================
+ SPAWN
+===================== */
+function spawnObstacle(){
+ obstacles.push({
+   x:canvas.width,
+   y:235,
+   w:30,
+   h:45,
+   anim:0
+ });
+}
+
+function spawnCoin(){
+ coins.push({
+   x:canvas.width,
+   y:180+Math.random()*40,
+   r:10,
+   anim:0
+ });
+}
+
+/* =====================
+ BACKGROUND (PARALLAX)
+===================== */
+let bg1=0,bg2=0,bg3=0;
+
+function drawBackground(){
+ bg1-=1;
+ bg2-=2;
+ bg3-=speed;
+
+ ctx.fillStyle="#bae6fd";
+ ctx.fillRect(bg1,200,900,120);
+ ctx.fillRect(bg1+900,200,900,120);
+
+ ctx.fillStyle="#7dd3fc";
+ ctx.fillRect(bg2,220,900,100);
+ ctx.fillRect(bg2+900,220,900,100);
+
+ ctx.fillStyle="#334155";
+ ctx.fillRect(bg3,275,900,6);
+ ctx.fillRect(bg3+900,275,900,6);
+
+ if(bg1<=-900) bg1=0;
+ if(bg2<=-900) bg2=0;
+ if(bg3<=-900) bg3=0;
+}
+
+/* =====================
+ UPDATE
+===================== */
+function update(){
+ if(gameOver) return;
+
+ frame++;
+
+ player.dy+=player.gravity;
+ player.y+=player.dy;
+
+ if(player.y>=230){
+   player.y=230;
+   player.dy=0;
+   player.grounded=true;
+ }
+
+ if(frame%7===0) player.frame++;
+
+ if(frame%90===0) spawnObstacle();
+ if(frame%140===0) spawnCoin();
+
+ obstacles.forEach(o=>{
+   o.x-=speed;
+   o.anim+=.2;
+ });
+
+ coins.forEach(c=>{
+   c.x-=speed;
+   c.anim+=.2;
+ });
+
+ /* collision obstacle */
+ obstacles.forEach(o=>{
+   if(player.x<o.x+o.w &&
+      player.x+player.w>o.x &&
+      player.y<o.y+o.h &&
+      player.y+player.h>o.y){
+        endGame();
+   }
+ });
+
+ /* coin pickup */
+ coins=coins.filter(c=>{
+   const dx=(player.x+20)-c.x;
+   const dy=(player.y+20)-c.y;
+   if(Math.sqrt(dx*dx+dy*dy)<20){
+     coinScore++;
+     beep(800,.08);
+     return false;
+   }
+   return c.x>0;
+ });
+
+ obstacles=obstacles.filter(o=>o.x+o.w>0);
+
+ score++;
+ scoreEl.textContent=score;
+ coinEl.textContent=coinScore;
+
+ if(score%500===0) speed+=.5;
+}
+
+/* =====================
+ DRAW PLAYER
+===================== */
+function drawPlayer(){
+ const bounce=Math.sin(player.frame*.5)*3;
+
+ ctx.fillStyle="#22c55e";
+ ctx.fillRect(player.x,player.y+bounce,45,45);
+
+ ctx.fillStyle="white";
+ ctx.fillRect(player.x+30,player.y+12+bounce,6,6);
+
+ ctx.strokeStyle="black";
+ ctx.lineWidth=3;
+
+ let leg=(player.frame%2?7:-7);
+
+ ctx.beginPath();
+ ctx.moveTo(player.x+10,player.y+45+bounce);
+ ctx.lineTo(player.x+10+leg,player.y+55+bounce);
+ ctx.stroke();
+
+ ctx.beginPath();
+ ctx.moveTo(player.x+30,player.y+45+bounce);
+ ctx.lineTo(player.x+30-leg,player.y+55+bounce);
+ ctx.stroke();
+}
+
+/* =====================
+ DRAW OBJECTS
+===================== */
+function drawObstacles(){
+ obstacles.forEach(o=>{
+   let b=Math.sin(o.anim)*5;
+   ctx.fillStyle="#ef4444";
+   ctx.beginPath();
+   ctx.moveTo(o.x,o.y+o.h);
+   ctx.lineTo(o.x+o.w/2,o.y+b);
+   ctx.lineTo(o.x+o.w,o.y+o.h);
+   ctx.fill();
+ });
+}
+
+function drawCoins(){
+ coins.forEach(c=>{
+   ctx.beginPath();
+   ctx.arc(c.x,c.y+c.anim*2,c.r,0,Math.PI*2);
+   ctx.fillStyle="gold";
+   ctx.fill();
+ });
+}
+
+/* =====================
+ DRAW
+===================== */
+function draw(){
+ ctx.clearRect(0,0,900,320);
+ drawBackground();
+ drawPlayer();
+ drawObstacles();
+ drawCoins();
+}
+
+/* =====================
+ LOOP
+===================== */
+function loop(){
+ update();
+ draw();
+ requestAnimationFrame(loop);
+}
+loop();
+
+/* =====================
+ GAME OVER
+===================== */
+function endGame(){
+ gameOver=true;
+
+ if(score>highScore){
+   localStorage.setItem("runnerHigh",score);
+   highEl.textContent=score;
+ }
+
+ beep(120,.4);
+}
+
+function restart(){
+ obstacles=[];
+ coins=[];
+ score=0;
+ coinScore=0;
+ speed=6;
+ frame=0;
+ gameOver=false;
+}
+</script>
+
+</body>
+</html>

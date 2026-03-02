@@ -1,31 +1,43 @@
-
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Ultra Endless Runner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+<title>Ultra Endless Runner - Mobile Ready</title>
 
 <style>
-body{
+html,body{
   margin:0;
+  padding:0;
   overflow:hidden;
   background:#020617;
   font-family:Arial;
-  color:white;
-  text-align:center;
+  touch-action:none; /* stop scrolling */
+}
+
+#gameWrapper{
+  width:100vw;
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
 }
 
 canvas{
-  display:block;
-  margin:auto;
   background:linear-gradient(#38bdf8,#e0f2fe);
+  max-width:100%;
+  max-height:100%;
 }
 
 #ui{
-  position:absolute;
-  width:100%;
+  position:fixed;
   top:10px;
-  font-size:20px;
+  width:100%;
+  text-align:center;
+  color:white;
+  font-size:18px;
+  z-index:10;
 }
 </style>
 </head>
@@ -35,15 +47,41 @@ canvas{
 <div id="ui">
 Score: <span id="score">0</span> |
 Coins: <span id="coins">0</span> |
-High Score: <span id="high">0</span>
+High: <span id="high">0</span>
 </div>
 
-<canvas id="game" width="900" height="320"></canvas>
+<div id="gameWrapper">
+  <canvas id="game"></canvas>
+</div>
 
 <script>
+/* =====================
+ RESPONSIVE CANVAS
+===================== */
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
 
+const BASE_WIDTH=900;
+const BASE_HEIGHT=320;
+
+function resizeGame(){
+  const scale=Math.min(
+    window.innerWidth/BASE_WIDTH,
+    window.innerHeight/BASE_HEIGHT
+  );
+
+  canvas.width=BASE_WIDTH;
+  canvas.height=BASE_HEIGHT;
+
+  canvas.style.width=BASE_WIDTH*scale+"px";
+  canvas.style.height=BASE_HEIGHT*scale+"px";
+}
+window.addEventListener("resize",resizeGame);
+resizeGame();
+
+/* =====================
+ UI
+===================== */
 const scoreEl=document.getElementById("score");
 const coinEl=document.getElementById("coins");
 const highEl=document.getElementById("high");
@@ -52,21 +90,27 @@ let highScore=localStorage.getItem("runnerHigh")||0;
 highEl.textContent=highScore;
 
 /* =====================
- SOUND (NO FILES)
+ SOUND (mobile safe)
 ===================== */
-const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-
+let audioCtx;
 function beep(freq,duration){
+  if(!audioCtx)
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+
   const osc=audioCtx.createOscillator();
   const gain=audioCtx.createGain();
+
   osc.connect(gain);
   gain.connect(audioCtx.destination);
+
   osc.frequency.value=freq;
   osc.start();
+
   gain.gain.exponentialRampToValueAtTime(
     0.00001,
     audioCtx.currentTime+duration
   );
+
   osc.stop(audioCtx.currentTime+duration);
 }
 
@@ -74,15 +118,9 @@ function beep(freq,duration){
  PLAYER
 ===================== */
 const player={
-  x:120,
-  y:230,
-  w:45,
-  h:45,
-  dy:0,
-  gravity:.7,
-  jump:-14,
-  grounded:true,
-  frame:0
+  x:120,y:230,w:45,h:45,
+  dy:0,gravity:.7,jump:-14,
+  grounded:true,frame:0
 };
 
 let obstacles=[];
@@ -109,24 +147,22 @@ document.addEventListener("keydown",e=>{
  if(e.code==="KeyR" && gameOver) restart();
 });
 
-canvas.addEventListener("touchstart",jump);
+/* MOBILE TOUCH */
+canvas.addEventListener("touchstart",(e)=>{
+ e.preventDefault();
+ jump();
+},{passive:false});
 
 /* =====================
  SPAWN
 ===================== */
 function spawnObstacle(){
- obstacles.push({
-   x:canvas.width,
-   y:235,
-   w:30,
-   h:45,
-   anim:0
- });
+ obstacles.push({x:900,y:235,w:30,h:45,anim:0});
 }
 
 function spawnCoin(){
  coins.push({
-   x:canvas.width,
+   x:900,
    y:180+Math.random()*40,
    r:10,
    anim:0
@@ -134,7 +170,7 @@ function spawnCoin(){
 }
 
 /* =====================
- BACKGROUND (PARALLAX)
+ PARALLAX BG
 ===================== */
 let bg1=0,bg2=0,bg3=0;
 
@@ -178,7 +214,6 @@ function update(){
  }
 
  if(frame%7===0) player.frame++;
-
  if(frame%90===0) spawnObstacle();
  if(frame%140===0) spawnCoin();
 
@@ -192,7 +227,7 @@ function update(){
    c.anim+=.2;
  });
 
- /* collision obstacle */
+ /* obstacle collision */
  obstacles.forEach(o=>{
    if(player.x<o.x+o.w &&
       player.x+player.w>o.x &&
